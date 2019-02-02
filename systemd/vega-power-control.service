@@ -15,7 +15,10 @@
 Description=AMD Power Control
 
 [Service]
-ExecStart=/usr/local/bin/vega-power-control
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/vega-power-control manual
+ExecStop=/usr/local/bin/vega-power-control auto
+
 
 [Install]
 WantedBy=multi-user.target

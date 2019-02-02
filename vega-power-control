@@ -19,7 +19,7 @@
 # Variables:
 # ----------
 DEBUG=0 # Enable (1) or Disable (0) DEBUG.
-AMDSYSFILE="power_dpm_force_performance_level" # ADM SYSFS file to search for.
+AMDSYSFILE="power_dpm_force_performance_level" # AMD SYSFS file to search for.
 SYSPATH=$(awk '{print}' <<< `find /sys/devices -name $AMDSYSFILE -type f -exec dirname {} \;`) # Autodetect SYSFS path.
 HWMONPATH="hwmon/hwmon0"
 KERNELVER=$(awk -F. '{print $1$2}' <<< `uname -r`) # Get kernel version.
@@ -27,7 +27,18 @@ KERNELREQ="415" # Minimum required kernel version for script.
 KERNELREQPOW="420" # Kernel version required for POWERCAP control.
 POWERCAP="0" # Enable (1) or Disable (0) AMD powercap settings, requires DEFAULTDPMPERFLVL set to manual.
 DEFAULTDPMSTATE="balanced" # Set power profile, options: battery (Won't work with discrete cards), balanced, performance.
-DEFAULTDPMPERFLVL="auto" # Default to auto, possible options are: auto, low, high, manual. See docs for more options.
+case "$1" in
+  "")
+    DEFAULTDPMPERFLVL="auto" # Default to auto, possible options are: auto, low, high, manual. See docs for more options.
+    ;;
+  "auto|low|high|manual")
+    DEFAULTDPMPERFLVL="$1"
+    ;;
+  *)
+    echo "Invalid power profile specified!"
+    exit -9
+    ;;
+esac
 HWDEVID=`cut -c 3- <<< cat $SYSPATH/device` # Get device ID for card.
 SUBSYSDEV=`cut -c 3- <<< cat $SYSPATH/subsystem_device` # Get Subsystem device ID for card.
 SUBSYSVEN=`cut -c 3- <<< cat $SYSPATH/subsystem_vendor` # Get Subsystem vendor ID for card.
@@ -91,60 +102,67 @@ if [ $DEBUG -eq 1 ]; then
 fi
 
 # Set profile (auto|manual):
-if [ "$DEFAULTDPMPERFLVL" == "auto" ]; then
-   POWERDPMPERFLVL=`cat $SYSPATH/power_dpm_force_performance_level`
-   if [ $DEBUG -eq 1 ]; then
+case "$DEFAULTDPMPERFLVL" in
+  "auto")
+    POWERDPMPERFLVL=`cat $SYSPATH/power_dpm_force_performance_level`
+    if [ $DEBUG -eq 1 ]; then
       echo_text "Current state: $POWERDPMPERFLVL"
-   fi
-   # Set back to defaults if manual profile was set previously:
-   if [ "$POWERDPMPERFLVL" != "auto" ]; then
+    fi
+    # Set back to defaults if manual profile was set previously:
+    if [ "$POWERDPMPERFLVL" != "auto" ]; then
       echo_text "Restoring to factory default settings..."
       echo "$DEFAULTDPMPERFLVL" > "$SYSPATH/power_dpm_force_performance_level"
       echo "r" > "$SYSPATH/pp_od_clk_voltage"
       echo "c" > "$SYSPATH/pp_od_clk_voltage"
-   fi
-   # power_dpm_state is for older AMD cards only.
-   # FROM THE DOCS: The power_dpm_state file is a legacy interface and is
-   # only provided for backwards compatibility.
-   #
-   # TODO: Set a check on this block to differentiate
-   # VEGA/POLARIS, etc.
-   echo_text "Setting profile to: $DEFAULTDPMSTATE..."
-   echo "$DEFAULTDPMSTATE" > "$SYSPATH/power_dpm_state"
-elif [ "$DEFAULTDPMPERFLVL" == "manual" ]; then
-   # TODO: Add for loop to use custom values for p-states, clocks and volt-
-   # ages per device. We can use an array to get the values for specific cards.
-   # This will require the refactoring of device/model detection.
-   #
-   # Set GPU frequencies/voltages:
-   echo_text "Applying custom power settings..."
-   echo "$DEFAULTDPMPERFLVL" > "$SYSPATH/power_dpm_force_performance_level"
-   echo "s 0 852 800" > "$SYSPATH/pp_od_clk_voltage"
-   echo "s 1 991 900" > "$SYSPATH/pp_od_clk_voltage"
-   echo "s 2 1084 910" > "$SYSPATH/pp_od_clk_voltage"
-   echo "s 3 1138 930" > "$SYSPATH/pp_od_clk_voltage"
-   echo "s 4 1200 945" > "$SYSPATH/pp_od_clk_voltage"
-   echo "s 5 1400 955" > "$SYSPATH/pp_od_clk_voltage"
-   echo "s 6 1500 970" > "$SYSPATH/pp_od_clk_voltage"
-   echo "s 7 1600 1000" > "$SYSPATH/pp_od_clk_voltage"
+    fi
+    # power_dpm_state is for older AMD cards only.
+    # FROM THE DOCS: The power_dpm_state file is a legacy interface and is
+    # only provided for backwards compatibility.
+    #
+    # TODO: Set a check on this block to differentiate
+    # VEGA/POLARIS, etc.
+    echo_text "Setting profile to: $DEFAULTDPMSTATE..."
+    echo "$DEFAULTDPMSTATE" > "$SYSPATH/power_dpm_state"
+    ;;
+  "manual")
+    # TODO: Add for loop to use custom values for p-states, clocks and volt-
+    # ages per device. We can use an array to get the values for specific cards.
+    # This will require the refactoring of device/model detection.
+    #
+    # Set GPU frequencies/voltages:
+    echo_text "Applying custom power settings..."
+    echo "$DEFAULTDPMPERFLVL" > "$SYSPATH/power_dpm_force_performance_level"
+    echo "s 0 852 800" > "$SYSPATH/pp_od_clk_voltage"
+    echo "s 1 991 900" > "$SYSPATH/pp_od_clk_voltage"
+    echo "s 2 1084 910" > "$SYSPATH/pp_od_clk_voltage"
+    echo "s 3 1138 930" > "$SYSPATH/pp_od_clk_voltage"
+    echo "s 4 1200 945" > "$SYSPATH/pp_od_clk_voltage"
+    echo "s 5 1400 955" > "$SYSPATH/pp_od_clk_voltage"
+    echo "s 6 1500 970" > "$SYSPATH/pp_od_clk_voltage"
+    echo "s 7 1600 1000" > "$SYSPATH/pp_od_clk_voltage"
 
-   # Set memory frequencies/voltages:
-   echo "m 0 167 800" > "$SYSPATH/pp_od_clk_voltage"
-   echo "m 1 500 850" > "$SYSPATH/pp_od_clk_voltage"
-   echo "m 2 800 910" > "$SYSPATH/pp_od_clk_voltage"
-   echo "m 3 1000 1000" > "$SYSPATH/pp_od_clk_voltage"
+    # Set memory frequencies/voltages:
+    echo "m 0 167 800" > "$SYSPATH/pp_od_clk_voltage"
+    echo "m 1 500 850" > "$SYSPATH/pp_od_clk_voltage"
+    echo "m 2 800 910" > "$SYSPATH/pp_od_clk_voltage"
+    echo "m 3 1000 1000" > "$SYSPATH/pp_od_clk_voltage"
 
-   # Set Power consumption - Requires Kernel 4.20+:
-   if [ $KERNELVER -ge $KERNELREQPOW ]; then
+    # Set Power consumption - Requires Kernel 4.20+:
+    if [ $KERNELVER -ge $KERNELREQPOW ]; then
       if [ $DEBUG -eq 1 ]; then
-         echo_text "Kernel Version: $KERNELVER"
+        echo_text "Kernel Version: $KERNELVER"
       fi
       if [ $POWERCAP -eq 1 ]; then
-         echo_text "Adjusting AMD Power Cap"
-         # To set the allowed maximum power consumption of the GPU to e.g. 220 Watts (Default wattage):
-         echo 220000000 > "$SYSPATH/$HWMONPATH/power1_cap"
+        echo_text "Adjusting AMD Power Cap"
+        # To set the allowed maximum power consumption of the GPU to e.g. 220 Watts (Default wattage):
+        echo 220000000 > "$SYSPATH/$HWMONPATH/power1_cap"
       fi
-   fi
-   # Commit power changes:
-   echo "c" > "$SYSPATH/pp_od_clk_voltage"
-fi
+    fi
+    # Commit power changes:
+    echo "c" > "$SYSPATH/pp_od_clk_voltage"
+    ;;
+  *)
+    echo "Unexpected Profile!"
+    exit -99
+    ;;
+esac
